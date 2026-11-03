@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 
 import { Categorie } from '../categories/entities/categorie.entity';
+import { Stock } from '../stocks/entities/stock.entity';
 import {
   createQueryBuilderMock,
   MockQueryBuilder,
@@ -32,6 +33,18 @@ function creerProduit(overrides: Partial<Produit> = {}): Produit {
   } as Produit;
 }
 
+function creerStock(overrides: Partial<Stock> = {}): Stock {
+  return {
+    id: '55555555-5555-5555-5555-555555555555',
+    produit_id: PRODUIT_ID,
+    quantite: 12,
+    seuil_alerte: 5,
+    created_at: new Date('2026-01-01'),
+    updated_at: new Date('2026-01-01'),
+    ...overrides,
+  } as Stock;
+}
+
 describe('ProduitsService', () => {
   let service: ProduitsService;
 
@@ -42,9 +55,12 @@ describe('ProduitsService', () => {
     find: jest.Mock;
     remove: jest.Mock;
     createQueryBuilder: jest.Mock;
+    existsBy: jest.Mock;
   };
 
   let categorieRepository: { findOne: jest.Mock };
+
+  let stockRepository: { findOne: jest.Mock };
 
   beforeEach(async () => {
     produitRepository = {
@@ -54,9 +70,12 @@ describe('ProduitsService', () => {
       find: jest.fn(),
       remove: jest.fn(),
       createQueryBuilder: jest.fn(),
+      existsBy: jest.fn(),
     };
 
     categorieRepository = { findOne: jest.fn() };
+
+    stockRepository = { findOne: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -66,6 +85,7 @@ describe('ProduitsService', () => {
           provide: getRepositoryToken(Categorie),
           useValue: categorieRepository,
         },
+        { provide: getRepositoryToken(Stock), useValue: stockRepository },
       ],
     }).compile();
 
@@ -323,6 +343,96 @@ describe('ProduitsService', () => {
       await expect(service.findOne('inconnu')).rejects.toBeInstanceOf(
         NotFoundException,
       );
+    });
+  });
+
+  // ------------------------------------------------------------------
+  // findStockByProduit
+  // ------------------------------------------------------------------
+  describe('findStockByProduit', () => {
+    it('retourne le stock du produit dans l’enveloppe standard', async () => {
+      produitRepository.existsBy.mockResolvedValue(true);
+      stockRepository.findOne.mockResolvedValue(
+        creerStock({ quantite: 12, seuil_alerte: 5 }),
+      );
+
+      const resultat = await service.findStockByProduit(PRODUIT_ID);
+
+      expect(produitRepository.existsBy).toHaveBeenCalledWith({
+        id: PRODUIT_ID,
+      });
+      expect(stockRepository.findOne).toHaveBeenCalledWith({
+        where: { produit_id: PRODUIT_ID },
+      });
+      expect(resultat).toEqual({
+        success: true,
+        message: 'Stock du produit',
+        data: {
+          produit_id: PRODUIT_ID,
+          quantite: 12,
+          seuil_alerte: 5,
+          disponible: true,
+          en_rupture: false,
+        },
+      });
+    });
+
+    it('signale un stock faible sans le considérer en rupture', async () => {
+      produitRepository.existsBy.mockResolvedValue(true);
+      stockRepository.findOne.mockResolvedValue(
+        creerStock({ quantite: 3, seuil_alerte: 5 }),
+      );
+
+      const resultat = await service.findStockByProduit(PRODUIT_ID);
+
+      expect(resultat.data).toEqual({
+        produit_id: PRODUIT_ID,
+        quantite: 3,
+        seuil_alerte: 5,
+        disponible: true,
+        en_rupture: false,
+      });
+    });
+
+    it('signale la rupture quand la quantité est épuisée', async () => {
+      produitRepository.existsBy.mockResolvedValue(true);
+      stockRepository.findOne.mockResolvedValue(
+        creerStock({ quantite: 0, seuil_alerte: 5 }),
+      );
+
+      const resultat = await service.findStockByProduit(PRODUIT_ID);
+
+      expect(resultat.data.disponible).toBe(false);
+      expect(resultat.data.en_rupture).toBe(true);
+    });
+
+    it('renvoie une rupture par défaut si aucun stock n’existe pour ce produit', async () => {
+      produitRepository.existsBy.mockResolvedValue(true);
+      stockRepository.findOne.mockResolvedValue(null);
+
+      const resultat = await service.findStockByProduit(PRODUIT_ID);
+
+      expect(resultat).toEqual({
+        success: true,
+        message: 'Stock du produit',
+        data: {
+          produit_id: PRODUIT_ID,
+          quantite: 0,
+          seuil_alerte: 0,
+          disponible: false,
+          en_rupture: true,
+        },
+      });
+    });
+
+    it('lève une NotFoundException si le produit est introuvable', async () => {
+      produitRepository.existsBy.mockResolvedValue(false);
+
+      await expect(
+        service.findStockByProduit('inconnu'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(stockRepository.findOne).not.toHaveBeenCalled();
     });
   });
 

@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import type { NextFunction, Request, Response } from 'express';
@@ -10,7 +11,23 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  const configService = app.get(ConfigService);
   const isProduction = process.env.NODE_ENV === 'production';
+
+  // --- Origines CORS ---
+  // CORS_ORIGIN : liste séparée par des virgules (ex: https://www.workstore.ci,https://app.workstore.ci)
+  // Fallbacks : prod → https://www.workstore.ci, dev → http://localhost:5173
+  const corsOriginEnv = configService
+    .get<string>('CORS_ORIGIN')
+    ?.split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  const corsOrigins =
+    corsOriginEnv && corsOriginEnv.length > 0
+      ? corsOriginEnv
+      : isProduction
+        ? ['https://www.workstore.ci']
+        : ['http://localhost:5173'];
 
   // --- Sécurité : forcer HTTPS en production ---
   if (isProduction) {
@@ -58,11 +75,9 @@ async function bootstrap() {
     }),
   );
 
-  // CORS pour le frontend (Vite sur le port 5173)
+  // CORS pour le frontend (Vite en dev, domaine WorkStore en production)
   app.enableCors({
-    origin: isProduction
-      ? ['https://www.bureaustore.fr']
-      : ['http://localhost:5173'],
+    origin: corsOrigins,
     credentials: true,
   });
 
@@ -84,8 +99,8 @@ async function bootstrap() {
   // Swagger : uniquement hors production
   if (!isProduction) {
     const config = new DocumentBuilder()
-      .setTitle('API Fournitures de Bureau')
-      .setDescription('Documentation de l’API e-commerce')
+      .setTitle('WorkStore API')
+      .setDescription('API e-commerce de fournitures de bureau — Côte d’Ivoire')
       .setVersion('1.0')
       .addBearerAuth()
       .build();

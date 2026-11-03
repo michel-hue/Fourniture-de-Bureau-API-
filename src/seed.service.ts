@@ -69,50 +69,47 @@ export class SeedService implements OnModuleInit {
     }
   }
 
+  /**
+   * Aucun compte (et donc aucun mot de passe) n'est codé en dur.
+   * Le compte administrateur n'est créé que si ADMIN_EMAIL et ADMIN_PASSWORD
+   * sont définis dans l'environnement — à faire une seule fois, puis retirer
+   * ADMIN_PASSWORD du .env.
+   */
   private async seedUsers() {
-    const comptes = [
-      {
-        nom: 'Admin',
-        prenom: 'BureauStore',
-        email: 'admin@bureaustore.fr',
-        password: 'Admin123!',
-        role: 'admin',
-      },
-      {
-        nom: 'Client',
-        prenom: 'Test',
-        email: 'client@bureaustore.fr',
-        password: 'Client123!',
-        role: 'client',
-      },
-    ];
+    const email = process.env.ADMIN_EMAIL?.trim();
+    const password = process.env.ADMIN_PASSWORD;
 
-    for (const compte of comptes) {
-      const existing = await this.userRepository.findOne({
-        where: { email: compte.email },
-      });
-      if (existing) {
-        this.logger.log(`Compte ${compte.email} déjà présent, seed ignoré`);
-        continue;
-      }
-
-      const hashedPassword = await bcrypt.hash(compte.password, 10);
-      const user = this.userRepository.create({
-        nom: compte.nom,
-        prenom: compte.prenom,
-        email: compte.email,
-        password: hashedPassword,
-        role: compte.role,
-      });
-      const savedUser = await this.userRepository.save(user);
-
-      const profile = this.profileRepository.create({
-        user_id: savedUser.id,
-      });
-      await this.profileRepository.save(profile);
-
-      this.logger.log(`Compte ${compte.email} créé (rôle : ${compte.role})`);
+    if (!email || !password) {
+      return;
     }
+
+    if (password.length < 10) {
+      this.logger.warn(
+        'ADMIN_PASSWORD trop court (10 caractères minimum) : compte admin non créé',
+      );
+      return;
+    }
+
+    const existing = await this.userRepository.findOne({ where: { email } });
+    if (existing) {
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const savedUser = await this.userRepository.save(
+      this.userRepository.create({
+        nom: process.env.ADMIN_NOM?.trim() || 'Administrateur',
+        prenom: process.env.ADMIN_PRENOM?.trim() || 'WorkStore',
+        email,
+        password: hashedPassword,
+        role: 'admin',
+      }),
+    );
+    await this.profileRepository.save(
+      this.profileRepository.create({ user_id: savedUser.id }),
+    );
+
+    this.logger.log(`Compte administrateur ${email} créé`);
   }
 
   private async seedCategories() {

@@ -93,6 +93,23 @@ export class ProduitsController {
     return this.produitsService.findFeatured(limit ? Number(limit) : 8);
   }
 
+  /**
+   * Route publique : disponibilité d'un produit pour le catalogue.
+   *
+   * Déclarée avant `@Get(':id')` pour éviter toute collision de routing.
+   * Aucun guard admin : la route reste accessible aux visiteurs.
+   */
+  @Get(':id/stock')
+  @ApiOperation({
+    summary: "Récupérer la disponibilité d'un produit (public)",
+  })
+  @ApiResponse({ status: 200, description: 'Stock du produit récupéré' })
+  @ApiResponse({ status: 400, description: 'Identifiant invalide' })
+  @ApiResponse({ status: 404, description: 'Produit introuvable' })
+  findStock(@Param('id', FrenchParseUUIDPipe) id: string) {
+    return this.produitsService.findStockByProduit(id);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Récupérer un produit par ID' })
   @ApiResponse({ status: 200, description: 'Produit récupéré' })

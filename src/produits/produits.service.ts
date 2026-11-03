@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { Categorie } from '../categories/entities/categorie.entity';
+import { Stock } from '../stocks/entities/stock.entity';
 import { CreateProduitDto } from './dto/create-produit.dto';
 import { UpdateProduitDto } from './dto/update-produit.dto';
 import { Produit } from './entities/produit.entity';
@@ -24,6 +25,8 @@ export class ProduitsService {
     private readonly produitRepository: Repository<Produit>,
     @InjectRepository(Categorie)
     private readonly categorieRepository: Repository<Categorie>,
+    @InjectRepository(Stock)
+    private readonly stockRepository: Repository<Stock>,
   ) {}
 
   async create(createProduitDto: CreateProduitDto) {
@@ -125,6 +128,48 @@ export class ProduitsService {
       success: true,
       message: 'Produit récupéré avec succès',
       data: produit,
+    };
+  }
+
+  /**
+   * Disponibilité d'un produit pour le catalogue public.
+   *
+   * - 404 si le produit n'existe pas (identifiant inconnu).
+   * - Si aucun stock n'est renseigné pour ce produit, on renvoie une rupture
+   *   (quantité 0) et non une 404 : le front doit toujours pouvoir afficher
+   *   une pastille de disponibilité.
+   *
+   * Convention d'affichage attendue par le front :
+   * - `en_rupture` → « Rupture » (quantité épuisée)
+   * - `quantite <= seuil_alerte` → « Stock faible : N »
+   * - sinon → « En stock »
+   */
+  async findStockByProduit(produitId: string) {
+    const produitExiste = await this.produitRepository.existsBy({
+      id: produitId,
+    });
+
+    if (!produitExiste) {
+      throw new NotFoundException('Produit introuvable');
+    }
+
+    const stock = await this.stockRepository.findOne({
+      where: { produit_id: produitId },
+    });
+
+    const quantite = stock ? stock.quantite : 0;
+    const seuilAlerte = stock ? stock.seuil_alerte : 0;
+
+    return {
+      success: true,
+      message: 'Stock du produit',
+      data: {
+        produit_id: produitId,
+        quantite,
+        seuil_alerte: seuilAlerte,
+        disponible: quantite > 0,
+        en_rupture: quantite <= 0,
+      },
     };
   }
 
