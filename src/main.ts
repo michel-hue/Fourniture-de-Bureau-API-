@@ -75,9 +75,14 @@ async function bootstrap() {
     }),
   );
 
+  // URL de preview Vercel du front (une nouvelle à chaque déploiement) :
+  // https://fourniture-de-bureau-<hash>-archangeyebouet5-3932s-projects.vercel.app
+  const vercelPreviewOrigin =
+    /^https:\/\/fourniture-de-bureau-[a-z0-9]+-archangeyebouet5-3932s-projects\.vercel\.app$/;
+
   // CORS pour le frontend (Vite en dev, domaine WorkStore en production)
   app.enableCors({
-    origin: corsOrigins,
+    origin: [...corsOrigins, vercelPreviewOrigin],
     credentials: true,
   });
 
