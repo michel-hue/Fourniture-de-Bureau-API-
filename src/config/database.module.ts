@@ -9,6 +9,7 @@ import { SeedService } from '../seed.service';
 import { Stock } from '../stocks/entities/stock.entity';
 import { User } from '../auth/entities/user.entity';
 import { Profile } from '../profiles/entities/profile.entity';
+import * as pg from 'pg';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { Profile } from '../profiles/entities/profile.entity';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
+        driver: pg,
         host: configService.get<string>('DB_HOST'),
         port: Number(configService.get<string>('DB_PORT')) || 5432,
         username: configService.get<string>('DB_USERNAME'),
